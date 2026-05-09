@@ -35,14 +35,12 @@ groq_api_key = os.getenv(
 
 st.set_page_config(
     page_title="Healthcare RAG Assistant",
-    page_icon="🩺",
     layout="wide"
 )
 
 st.title(
-    "🩺 Healthcare RAG Assistant"
+    "Healthcare RAG Assistant"
 )
-
 st.info(
     """
 Example Questions:
