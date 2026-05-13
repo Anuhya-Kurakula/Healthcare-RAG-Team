@@ -1,4 +1,5 @@
 import os
+import shutil
 import streamlit as st
 
 from dotenv import load_dotenv
@@ -38,9 +39,34 @@ st.set_page_config(
     layout="wide"
 )
 
+# =========================
+# SIDEBAR
+# =========================
+
+with st.sidebar:
+
+    st.header(
+        "Healthcare RAG Assistant"
+    )
+
+    st.write(
+        "Ask questions from healthcare PDFs."
+    )
+
+    if st.button("Clear Chat"):
+
+        st.session_state.messages = []
+
+        st.rerun()
+
+# =========================
+# TITLE
+# =========================
+
 st.title(
     "Healthcare RAG Assistant"
 )
+
 st.info(
     """
 Example Questions:
@@ -51,6 +77,17 @@ Example Questions:
 • What treatment is recommended for hypertension?
 """
 )
+
+# =========================
+# VECTOR DB PATH
+# =========================
+
+VECTOR_DB_PATH = "vectorstore"
+
+# =========================
+# PDF UPLOAD
+# =========================
+
 uploaded_files = st.file_uploader(
     "Upload Healthcare PDFs",
     type="pdf",
@@ -59,7 +96,25 @@ uploaded_files = st.file_uploader(
 
 if uploaded_files:
 
-    os.makedirs("uploads", exist_ok=True)
+    # Create uploads folder
+
+    os.makedirs(
+        "uploads",
+        exist_ok=True
+    )
+
+    # Delete old uploaded PDFs
+
+    for old_file in os.listdir("uploads"):
+
+        old_path = os.path.join(
+            "uploads",
+            old_file
+        )
+
+        os.remove(old_path)
+
+    # Save new uploaded PDFs
 
     for uploaded_file in uploaded_files:
 
@@ -72,7 +127,19 @@ if uploaded_files:
 
             f.write(uploaded_file.read())
 
-    st.success("PDFs uploaded successfully!")
+    # Delete old vector database
+
+    if os.path.exists(VECTOR_DB_PATH):
+
+        shutil.rmtree(VECTOR_DB_PATH)
+
+    # Clear cache
+
+    st.cache_resource.clear()
+
+    st.success(
+        "PDFs uploaded successfully!"
+    )
 
 # =========================
 # EMBEDDINGS
@@ -86,12 +153,11 @@ embeddings = HuggingFaceEmbeddings(
 # VECTOR DB CREATION
 # =========================
 
-VECTOR_DB_PATH = "vectorstore"
-
 @st.cache_resource
 def load_vectorstore():
 
     # If vector DB already exists
+
     if os.path.exists(VECTOR_DB_PATH):
 
         vectorstore = FAISS.load_local(
@@ -107,6 +173,10 @@ def load_vectorstore():
     documents = []
 
     upload_folder = "uploads"
+
+    if not os.path.exists(upload_folder):
+
+        os.makedirs(upload_folder)
 
     pdf_files = [
         file
@@ -133,6 +203,8 @@ def load_vectorstore():
 
         documents.extend(docs)
 
+    # Text Splitting
+
     text_splitter = (
         RecursiveCharacterTextSplitter(
             chunk_size=1000,
@@ -143,6 +215,8 @@ def load_vectorstore():
     split_docs = text_splitter.split_documents(
         documents
     )
+
+    # Create FAISS DB
 
     vectorstore = FAISS.from_documents(
         split_docs,
@@ -179,11 +253,33 @@ llm = ChatGroq(
 )
 
 # =========================
-# QUESTION INPUT
+# SESSION STATE
 # =========================
 
-question = st.text_input(
-    "Ask a healthcare question:"
+if "messages" not in st.session_state:
+
+    st.session_state.messages = []
+
+# =========================
+# DISPLAY CHAT HISTORY
+# =========================
+
+for message in st.session_state.messages:
+
+    with st.chat_message(
+        message["role"]
+    ):
+
+        st.markdown(
+            message["content"]
+        )
+
+# =========================
+# CHAT INPUT
+# =========================
+
+question = st.chat_input(
+    "Ask a healthcare question"
 )
 
 # =========================
@@ -192,20 +288,43 @@ question = st.text_input(
 
 if question:
 
+    # Store User Message
+
+    st.session_state.messages.append(
+        {
+            "role": "user",
+            "content": question
+        }
+    )
+
+    # Display User Message
+
+    with st.chat_message("user"):
+
+        st.markdown(question)
+
     with st.spinner(
         "Generating answer..."
     ):
+
+        # Retrieve Docs
 
         retrieved_docs = retriever.invoke(
             question
         )
 
+        # Context Creation
+
         context = "\n\n".join(
             [
                 doc.page_content
+                .replace("z", "•")
+                .replace("\n", " ")
                 for doc in retrieved_docs
             ]
         )
+
+        # Sources
 
         sources = list(
             set(
@@ -215,6 +334,8 @@ if question:
                 ]
             )
         )
+
+        # Prompt
 
         prompt = f"""
 You are a healthcare AI assistant.
@@ -233,18 +354,35 @@ Question:
 {question}
 """
 
+        # LLM Response
+
         response = llm.invoke(
             prompt
         )
 
-        st.subheader("Answer")
+        # Assistant Response
 
-        st.write(
-            response.content
-        )
+        with st.chat_message(
+            "assistant"
+        ):
 
-        st.subheader("Sources")
+            st.markdown(
+                response.content
+            )
 
-        for source in sources:
+            st.subheader(
+                "Sources"
+            )
 
-            st.write(source)
+            for source in sources:
+
+                st.write(source)
+
+    # Store Assistant Response
+
+    st.session_state.messages.append(
+        {
+            "role": "assistant",
+            "content": response.content
+        }
+    )
