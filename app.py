@@ -109,7 +109,7 @@ if uploaded_files:
         exist_ok=True
     )
 
-    # Check if files are new
+    # Check if new upload exists
 
     new_upload = False
 
@@ -120,7 +120,7 @@ if uploaded_files:
             uploaded_file.name
         )
 
-        # Save only if new file
+        # Save only if file is new
 
         if not os.path.exists(save_path):
 
@@ -130,7 +130,7 @@ if uploaded_files:
 
             new_upload = True
 
-    # Rebuild vector DB only for new uploads
+    # Refresh vector DB only for new uploads
 
     if new_upload:
 
@@ -141,7 +141,7 @@ if uploaded_files:
         st.cache_resource.clear()
 
         st.success(
-            "PDFs uploaded and vector database refreshed!"
+            "New PDFs uploaded and vector database refreshed!"
         )
 
     else:
@@ -149,6 +149,28 @@ if uploaded_files:
         st.info(
             "Using existing vector database."
         )
+
+# =========================
+# DOCUMENT FILTER
+# =========================
+
+upload_folder = "uploads"
+
+available_pdfs = []
+
+if os.path.exists(upload_folder):
+
+    available_pdfs = [
+        file
+        for file in os.listdir(upload_folder)
+        if file.endswith(".pdf")
+    ]
+
+selected_pdf = st.selectbox(
+    "Select Document",
+    ["All Documents"] + available_pdfs
+)
+
 # =========================
 # EMBEDDINGS
 # =========================
@@ -176,11 +198,9 @@ def load_vectorstore():
 
         return vectorstore
 
-    # Create new vector DB
+    # Create vector DB
 
     documents = []
-
-    upload_folder = "uploads"
 
     if not os.path.exists(upload_folder):
 
@@ -247,9 +267,26 @@ with st.spinner(
 
     vectorstore = load_vectorstore()
 
-retriever = vectorstore.as_retriever(
-    search_kwargs={"k": 3}
-)
+# =========================
+# RETRIEVER WITH FILTER
+# =========================
+
+if selected_pdf == "All Documents":
+
+    retriever = vectorstore.as_retriever(
+        search_kwargs={"k": 3}
+    )
+
+else:
+
+    retriever = vectorstore.as_retriever(
+        search_kwargs={
+            "k": 3,
+            "filter": {
+                "source": selected_pdf
+            }
+        }
+    )
 
 # =========================
 # MEMORY
@@ -371,7 +408,7 @@ if question:
 
             full_response = ""
 
-            # Streaming Effect
+            # Streaming Response
 
             for word in answer.split():
 
