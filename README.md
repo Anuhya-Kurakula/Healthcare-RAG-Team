@@ -1,4 +1,4 @@
-Healthcare-RAG-Assistant
+# Healthcare-RAG-Assistant
 
 Healthcare-RAG-Assistant is an advanced Retrieval-Augmented Generation (RAG) based healthcare intelligence system designed to help users retrieve healthcare-related information from medical documents using conversational AI.
 
@@ -6,7 +6,7 @@ The system combines semantic retrieval, conversational memory, metadata filterin
 
 ---
 
-Key Features
+# Key Features
 
 - Dynamic PDF Upload
 - Multi-Document Retrieval
