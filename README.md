@@ -26,15 +26,15 @@ The system combines semantic retrieval, conversational memory, metadata filterin
 
 # System Architecture
 
-![Architecture Diagram](healtharchitecture.png)
+![Architecture Diagram](healtharchitecture.jpeg)
 
 ---
 
-System Workflow
+# System Workflow
 
 The application follows a complete Retrieval-Augmented Generation (RAG) pipeline for healthcare document understanding and conversational question answering.
 
-Workflow Steps
+## Workflow Steps
 
 1. User uploads healthcare PDF documents through the Streamlit interface.
 2. PDF Loader extracts healthcare document content.
@@ -61,23 +61,23 @@ Workflow Steps
 
 ---
 
-Architecture Components
+# Architecture Components
 
-Ingestion Pipeline
+## Ingestion Pipeline
 
 - PDF Document Loader
 - Metadata Enrichment
 - RecursiveCharacterTextSplitter
 - HuggingFace Embeddings
 
-Vector & Retrieval Layer
+## Vector & Retrieval Layer
 
 - FAISS Vector Database
 - Semantic Retrieval
 - Metadata Filtering
 - Persistent Local Vectorstore
 
-Retrieval & Generation Layer
+## Retrieval & Generation Layer
 
 - Conversational Memory
 - Query Understanding
@@ -85,7 +85,7 @@ Retrieval & Generation Layer
 - Grounded Prompting
 - Groq LLM
 
-Response Layer
+## Response Layer
 
 - Streaming Responses
 - Chat Interface
@@ -94,48 +94,49 @@ Response Layer
 
 ---
 
-Tech Stack
+# Tech Stack
 
-Component| Technology
-Frontend| Streamlit
-Framework| LangChain
-LLM| Groq
-Embeddings| HuggingFace Sentence Transformers
-Vector Database| FAISS
-Programming Language| Python
+|Component| Technology|
+|---|---|
+|Frontend| Streamlit|
+|Framework| LangChain|
+|LLM| Groq|
+|Embeddings| HuggingFace Sentence Transformers|
+|Vector Database| FAISS|
+|Programming Language| Python|
 
 ---
 
-Installation
+# Installation
 
-Clone Repository
+## Clone Repository
 
-git clone <your-github-repository-link>
+git clone https://github.com/Pavani-D410/Healthcare-RAG-Assistant
 cd Healthcare-RAG-Assistant
 
 ---
 
-Create Virtual Environment
+## Create Virtual Environment
 
-Windows
+### Windows
 
 python -m venv venv
 venv\Scripts\activate
 
-Linux / Mac
+### Linux / Mac
 
 python3 -m venv venv
 source venv/bin/activate
 
 ---
 
-Install Dependencies
+## Install Dependencies
 
 pip install -r requirements.txt
 
 ---
 
-Environment Variables
+# Environment Variables
 
 Create a ".env" file in the project root directory.
 
@@ -143,13 +144,13 @@ GROQ_API_KEY=your_api_key
 
 ---
 
-Run Application
+# Run Application
 
 streamlit run app.py
 
 ---
 
-Project Structure
+# Project Structure
 
 Healthcare-RAG-Assistant/
 │
@@ -162,7 +163,7 @@ Healthcare-RAG-Assistant/
 
 ---
 
-Challenges Faced
+# Challenges Faced
 
 - Large healthcare PDFs increased retrieval latency
 - PDF extraction produced noisy formatting and symbols
@@ -174,7 +175,7 @@ Challenges Faced
 
 ---
 
-Future Improvements
+# Future Improvements
 
 - Pinecone / ChromaDB Integration
 - OCR Support for Scanned Medical Documents
