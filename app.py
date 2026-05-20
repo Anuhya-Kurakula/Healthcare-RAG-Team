@@ -3,6 +3,10 @@ import streamlit as st
 
 from dotenv import load_dotenv
 
+from sklearn.metrics.pairwise import (
+    cosine_similarity
+)
+
 from langchain_community.document_loaders import (
     PyPDFLoader
 )
@@ -11,7 +15,7 @@ from langchain_text_splitters import (
     RecursiveCharacterTextSplitter
 )
 
-from langchain_community.embeddings import (
+from langchain_huggingface import (
     HuggingFaceEmbeddings
 )
 
@@ -21,10 +25,6 @@ from langchain_community.vectorstores import (
 
 from langchain_groq import (
     ChatGroq
-)
-
-from sentence_transformers import (
-    CrossEncoder
 )
 
 # ==================================================
@@ -56,7 +56,7 @@ st.title(
 
 st.markdown(
     """
-Ask healthcare-related questions based on uploaded healthcare documents using an advanced 6-stage RAG pipeline.
+Ask healthcare-related questions based on uploaded healthcare documents using an advanced RAG pipeline.
 """
 )
 
@@ -79,17 +79,15 @@ with st.expander("💡 Example Questions"):
 # EMBEDDING MODEL
 # ==================================================
 
-embeddings = HuggingFaceEmbeddings(
-    model_name="C:/models/all-MiniLM-L6-v2"
-)
+@st.cache_resource
+def load_embeddings():
 
-# ==================================================
-# RERANKER MODEL
-# ==================================================
+    return HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_kwargs={"device": "cpu"}
+    )
 
-reranker = CrossEncoder(
-    "C:/hf_models/msmarco"
-)
+embeddings = load_embeddings()
 
 # ==================================================
 # VECTOR DATABASE
@@ -219,7 +217,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # ==================================================
-# STAGE 1 — SMART QUERY REWRITING
+# QUERY REWRITING
 # ==================================================
 
 def rewrite_query(query):
@@ -234,29 +232,54 @@ def rewrite_query(query):
     )
 
     # ==================================================
-    # FOLLOW-UP QUERIES
+    # FOLLOW-UP QUERY PATTERNS
     # ==================================================
 
     followup_queries = [
-        "give symptoms",
+
+        # Symptoms
+
         "symptoms",
-        "give treatment",
-        "treatment",
-        "give curing methods",
-        "causes",
-        "complications",
-        "how is it treated",
-        "how is it diagnosed",
-        "how is it managed",
-        "how is it prevented",
+        "give symptoms",
         "what are symptoms",
-        "what are complications",
-        "what is the treatment",
-        "how is treatment done"
+
+        # Treatment
+
+        "treatment",
+        "give treatment",
+        "how is it treated",
+        "how it is treated",
+        "how treated",
+        "how is treatment done",
+
+        # Diagnosis
+
+        "diagnosis",
+        "how is it diagnosed",
+
+        # Prevention
+
+        "prevention",
+        "how is it prevented",
+
+        # Management
+
+        "management",
+        "how is it managed",
+
+        # Causes
+
+        "causes",
+        "what causes it",
+
+        # Complications
+
+        "complications",
+        "side effects"
     ]
 
     # ==================================================
-    # COMPLETE QUESTIONS
+    # COMPLETE QUESTION STARTERS
     # ==================================================
 
     complete_question_starters = [
@@ -268,7 +291,8 @@ def rewrite_query(query):
         "define",
         "describe",
         "compare",
-        "difference"
+        "difference",
+        "how"
     ]
 
     words = query_lower.split()
@@ -281,6 +305,10 @@ def rewrite_query(query):
         len(words) >= 3
         and
         words[0] in complete_question_starters
+        and
+        "it" not in query_lower
+        and
+        "its" not in query_lower
     ):
 
         return query
@@ -296,7 +324,6 @@ def rewrite_query(query):
         if phrase in query_lower:
 
             followup_detected = True
-
             break
 
     if not followup_detected:
@@ -304,7 +331,7 @@ def rewrite_query(query):
         return query
 
     # ==================================================
-    # USE CURRENT TOPIC
+    # GET LAST TOPIC
     # ==================================================
 
     last_topic = st.session_state.current_topic
@@ -318,24 +345,27 @@ def rewrite_query(query):
     # ==================================================
 
     rewrite_prompt = f"""
-You are a healthcare query rewriter.
+You are an intelligent healthcare query rewriter.
 
-Convert the follow-up healthcare query
-into a complete standalone healthcare query.
+Your task:
+Convert follow-up healthcare questions into complete standalone questions.
 
-IMPORTANT RULES:
-- Use previous healthcare topic
-- Keep query concise
+Rules:
+- Use previous topic context carefully
+- Replace words like:
+  "it", "its", "they", "them"
+  with the actual healthcare topic
+- Keep the rewritten query concise
 - Do NOT hallucinate
-- Return ONLY rewritten query
+- Return ONLY the rewritten query
 
-Previous Topic:
+Previous Healthcare Topic:
 {last_topic}
 
 Follow-up Query:
 {query}
 
-Rewritten Query:
+Standalone Query:
 """
 
     rewritten_response = llm.invoke(
@@ -355,10 +385,10 @@ Rewritten Query:
 def extract_topic(query):
 
     prompt = f"""
-Extract ONLY the main healthcare topic
-from this query.
+Extract ONLY the main healthcare topic.
 
 Examples:
+
 Query: What is malaria?
 Topic: malaria
 
@@ -368,7 +398,7 @@ Topic: diabetes
 Query: How is dengue treated?
 Topic: dengue
 
-Return ONLY topic name.
+Return ONLY the topic.
 
 Query:
 {query}
@@ -385,26 +415,34 @@ Topic:
     return topic
 
 # ==================================================
-# STAGE 3 — RERANKING
+# RERANKING
 # ==================================================
 
 def rerank_documents(query, docs):
 
-    pairs = [
-        (query, doc.page_content)
-        for doc in docs
-    ]
-
-    scores = reranker.predict(
-        pairs
+    query_embedding = embeddings.embed_query(
+        query
     )
 
-    # ==================================================
-    # SORT USING SCORE ONLY
-    # ==================================================
+    doc_scores = []
+
+    for doc in docs:
+
+        doc_embedding = embeddings.embed_query(
+            doc.page_content
+        )
+
+        score = cosine_similarity(
+            [query_embedding],
+            [doc_embedding]
+        )[0][0]
+
+        doc_scores.append(
+            (score, doc)
+        )
 
     ranked_docs = sorted(
-        zip(scores, docs),
+        doc_scores,
         key=lambda x: x[0],
         reverse=True
     )
@@ -415,7 +453,7 @@ def rerank_documents(query, docs):
     ]
 
 # ==================================================
-# STAGE 4 — REFINE DOCUMENTS
+# REFINE DOCUMENTS
 # ==================================================
 
 def refine_documents(docs):
@@ -474,7 +512,7 @@ if question:
     ):
 
         # ==================================================
-        # STAGE 1 — QUERY REWRITE
+        # QUERY REWRITE
         # ==================================================
 
         rewritten_query = rewrite_query(
@@ -482,7 +520,7 @@ if question:
         )
 
         # ==================================================
-        # STORE CURRENT TOPIC
+        # TOPIC EXTRACTION
         # ==================================================
 
         new_topic = extract_topic(
@@ -498,7 +536,7 @@ if question:
             st.session_state.current_topic = new_topic
 
         # ==================================================
-        # STAGE 2 — RETRIEVAL
+        # RETRIEVAL
         # ==================================================
 
         retrieved_docs_with_scores = (
@@ -538,7 +576,7 @@ if question:
         else:
 
             # ==================================================
-            # STAGE 3 — RERANKING
+            # RERANKING
             # ==================================================
 
             reranked_docs = rerank_documents(
@@ -547,7 +585,7 @@ if question:
             )
 
             # ==================================================
-            # STAGE 4 — REFINEMENT
+            # REFINE DOCUMENTS
             # ==================================================
 
             refined_docs = refine_documents(
@@ -555,7 +593,7 @@ if question:
             )
 
             # ==================================================
-            # STAGE 5 — CONTEXT CREATION
+            # CONTEXT CREATION
             # ==================================================
 
             context = "\n\n".join(
@@ -603,13 +641,13 @@ Context:
 {context}
 
 Question:
-{question}
+{rewritten_query}
 
 Answer:
 """
 
             # ==================================================
-            # STAGE 6 — GENERATION
+            # GENERATION
             # ==================================================
 
             response = llm.invoke(
@@ -624,12 +662,12 @@ Answer:
 
             response_text = (
                 response_text
-                .replace("z ", "• ")
                 .replace("\\n", "\n")
+                .replace("•", "\n•")
             )
 
             # ==================================================
-            # REMOVE SOURCES IF INVALID
+            # REMOVE INVALID SOURCES
             # ==================================================
 
             if (
@@ -652,7 +690,7 @@ Answer:
     )
 
     # ==================================================
-    # DISPLAY ASSISTANT RESPONSE
+    # DISPLAY RESPONSE
     # ==================================================
 
     with st.chat_message("assistant"):
