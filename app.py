@@ -1,5 +1,4 @@
 import os
-import shutil
 import streamlit as st
 
 from dotenv import load_dotenv
@@ -16,21 +15,21 @@ from langchain_community.embeddings import (
     HuggingFaceEmbeddings
 )
 
-from langchain_community.vectorstores import FAISS
-
-from langchain_groq import ChatGroq
-
-from langchain.memory import (
-    ConversationBufferMemory
+from langchain_community.vectorstores import (
+    FAISS
 )
 
-from langchain.chains import (
-    ConversationalRetrievalChain
+from langchain_groq import (
+    ChatGroq
 )
 
-# =========================
-# LOAD ENV
-# =========================
+from sentence_transformers import (
+    CrossEncoder
+)
+
+# ==================================================
+# LOAD ENV VARIABLES
+# ==================================================
 
 load_dotenv()
 
@@ -38,155 +37,72 @@ groq_api_key = os.getenv(
     "GROQ_API_KEY"
 )
 
-# =========================
+# ==================================================
 # PAGE CONFIG
-# =========================
+# ==================================================
 
 st.set_page_config(
     page_title="Healthcare RAG Assistant",
     layout="wide"
 )
 
-# =========================
-# SIDEBAR
-# =========================
-
-with st.sidebar:
-
-    st.header(
-        "Healthcare RAG Assistant"
-    )
-
-    st.write(
-        "Ask questions from healthcare PDFs."
-    )
-
-    if st.button("Clear Chat"):
-
-        st.session_state.messages = []
-
-        st.rerun()
-
-# =========================
+# ==================================================
 # TITLE
-# =========================
+# ==================================================
 
 st.title(
-    "Healthcare RAG Assistant"
+    "🏥 Healthcare RAG Assistant"
 )
 
-st.info(
+st.markdown(
     """
-Example Questions:
-
-• What are symptoms of dengue?
-• How is diabetes diagnosed?
-• Compare malaria and dengue symptoms.
-• What treatment is recommended for hypertension?
+Ask healthcare-related questions based on uploaded healthcare documents using an advanced 6-stage RAG pipeline.
 """
 )
 
-# =========================
-# VECTOR DB PATH
-# =========================
+# ==================================================
+# EXAMPLE QUESTIONS
+# ==================================================
 
-VECTOR_DB_PATH = "vectorstore"
+with st.expander("💡 Example Questions"):
 
-# =========================
-# PDF UPLOAD
-# =========================
-
-uploaded_files = st.file_uploader(
-    "Upload Healthcare PDFs",
-    type="pdf",
-    accept_multiple_files=True
-)
-
-if uploaded_files:
-
-    os.makedirs(
-        "uploads",
-        exist_ok=True
+    st.markdown(
+        """
+- What are symptoms of dengue?
+- How is diabetes diagnosed?
+- Compare malaria and dengue symptoms.
+- What treatment is recommended for hypertension?
+"""
     )
 
-    # Check if new upload exists
-
-    new_upload = False
-
-    for uploaded_file in uploaded_files:
-
-        save_path = os.path.join(
-            "uploads",
-            uploaded_file.name
-        )
-
-        # Save only if file is new
-
-        if not os.path.exists(save_path):
-
-            with open(save_path, "wb") as f:
-
-                f.write(uploaded_file.read())
-
-            new_upload = True
-
-    # Refresh vector DB only for new uploads
-
-    if new_upload:
-
-        if os.path.exists(VECTOR_DB_PATH):
-
-            shutil.rmtree(VECTOR_DB_PATH)
-
-        st.cache_resource.clear()
-
-        st.success(
-            "New PDFs uploaded and vector database refreshed!"
-        )
-
-    else:
-
-        st.info(
-            "Using existing vector database."
-        )
-
-# =========================
-# DOCUMENT FILTER
-# =========================
-
-upload_folder = "uploads"
-
-available_pdfs = []
-
-if os.path.exists(upload_folder):
-
-    available_pdfs = [
-        file
-        for file in os.listdir(upload_folder)
-        if file.endswith(".pdf")
-    ]
-
-selected_pdf = st.selectbox(
-    "Select Document",
-    ["All Documents"] + available_pdfs
-)
-
-# =========================
-# EMBEDDINGS
-# =========================
+# ==================================================
+# EMBEDDING MODEL
+# ==================================================
 
 embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
+    model_name="C:/models/all-MiniLM-L6-v2"
 )
 
-# =========================
-# VECTORSTORE
-# =========================
+# ==================================================
+# RERANKER MODEL
+# ==================================================
+
+reranker = CrossEncoder(
+    "C:/hf_models/msmarco"
+)
+
+# ==================================================
+# VECTOR DATABASE
+# ==================================================
+
+VECTOR_DB_PATH = "vectorstore"
 
 @st.cache_resource
 def load_vectorstore():
 
-    # Load existing vector DB
+    # ==================================================
+    # LOAD EXISTING VECTORSTORE
+    # ==================================================
 
     if os.path.exists(VECTOR_DB_PATH):
 
@@ -198,13 +114,13 @@ def load_vectorstore():
 
         return vectorstore
 
-    # Create vector DB
+    # ==================================================
+    # LOAD DOCUMENTS
+    # ==================================================
 
     documents = []
 
-    if not os.path.exists(upload_folder):
-
-        os.makedirs(upload_folder)
+    upload_folder = "uploads"
 
     pdf_files = [
         file
@@ -231,12 +147,14 @@ def load_vectorstore():
 
         documents.extend(docs)
 
-    # Text Splitting
+    # ==================================================
+    # CHUNKING
+    # ==================================================
 
     text_splitter = (
         RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200
+            chunk_size=800,
+            chunk_overlap=100
         )
     )
 
@@ -244,7 +162,9 @@ def load_vectorstore():
         documents
     )
 
-    # Create FAISS DB
+    # ==================================================
+    # CREATE VECTORSTORE
+    # ==================================================
 
     vectorstore = FAISS.from_documents(
         split_docs,
@@ -257,9 +177,9 @@ def load_vectorstore():
 
     return vectorstore
 
-# =========================
+# ==================================================
 # LOAD VECTORSTORE
-# =========================
+# ==================================================
 
 with st.spinner(
     "Loading Healthcare Knowledge Base..."
@@ -267,94 +187,272 @@ with st.spinner(
 
     vectorstore = load_vectorstore()
 
-# =========================
-# RETRIEVER WITH FILTER
-# =========================
-
-if selected_pdf == "All Documents":
-
-    retriever = vectorstore.as_retriever(
-        search_kwargs={"k": 3}
-    )
-
-else:
-
-    retriever = vectorstore.as_retriever(
-        search_kwargs={
-            "k": 3,
-            "filter": {
-                "source": selected_pdf
-            }
-        }
-    )
-
-# =========================
-# MEMORY
-# =========================
-
-memory = ConversationBufferMemory(
-    memory_key="chat_history",
-    return_messages=True,
-    output_key="answer"
-)
-
-# =========================
-# LLM
-# =========================
+# ==================================================
+# LOAD LLM
+# ==================================================
 
 llm = ChatGroq(
     groq_api_key=groq_api_key,
     model_name="llama-3.1-8b-instant"
 )
 
-# =========================
-# CONVERSATIONAL CHAIN
-# =========================
-
-conversation_chain = ConversationalRetrievalChain.from_llm(
-    llm=llm,
-    retriever=retriever,
-    memory=memory,
-    return_source_documents=True
-)
-
-# =========================
-# SESSION STATE
-# =========================
+# ==================================================
+# CONVERSATIONAL MEMORY
+# ==================================================
 
 if "messages" not in st.session_state:
 
     st.session_state.messages = []
 
-# =========================
+if "current_topic" not in st.session_state:
+
+    st.session_state.current_topic = None
+
+# ==================================================
 # DISPLAY CHAT HISTORY
-# =========================
+# ==================================================
 
 for message in st.session_state.messages:
 
-    with st.chat_message(
-        message["role"]
+    with st.chat_message(message["role"]):
+
+        st.markdown(message["content"])
+
+# ==================================================
+# STAGE 1 — SMART QUERY REWRITING
+# ==================================================
+
+def rewrite_query(query):
+
+    query = query.strip()
+
+    query_lower = (
+        query.lower()
+        .replace("?", "")
+        .replace(".", "")
+        .strip()
+    )
+
+    # ==================================================
+    # FOLLOW-UP QUERIES
+    # ==================================================
+
+    followup_queries = [
+        "give symptoms",
+        "symptoms",
+        "give treatment",
+        "treatment",
+        "give curing methods",
+        "causes",
+        "complications",
+        "how is it treated",
+        "how is it diagnosed",
+        "how is it managed",
+        "how is it prevented",
+        "what are symptoms",
+        "what are complications",
+        "what is the treatment",
+        "how is treatment done"
+    ]
+
+    # ==================================================
+    # COMPLETE QUESTIONS
+    # ==================================================
+
+    complete_question_starters = [
+        "what",
+        "who",
+        "when",
+        "where",
+        "which",
+        "define",
+        "describe",
+        "compare",
+        "difference"
+    ]
+
+    words = query_lower.split()
+
+    # ==================================================
+    # DO NOT REWRITE COMPLETE QUESTIONS
+    # ==================================================
+
+    if (
+        len(words) >= 3
+        and
+        words[0] in complete_question_starters
     ):
 
-        st.markdown(
-            message["content"]
-        )
+        return query
 
-# =========================
+    # ==================================================
+    # FOLLOW-UP DETECTION
+    # ==================================================
+
+    followup_detected = False
+
+    for phrase in followup_queries:
+
+        if phrase in query_lower:
+
+            followup_detected = True
+
+            break
+
+    if not followup_detected:
+
+        return query
+
+    # ==================================================
+    # USE CURRENT TOPIC
+    # ==================================================
+
+    last_topic = st.session_state.current_topic
+
+    if not last_topic:
+
+        return query
+
+    # ==================================================
+    # QUERY REWRITE PROMPT
+    # ==================================================
+
+    rewrite_prompt = f"""
+You are a healthcare query rewriter.
+
+Convert the follow-up healthcare query
+into a complete standalone healthcare query.
+
+IMPORTANT RULES:
+- Use previous healthcare topic
+- Keep query concise
+- Do NOT hallucinate
+- Return ONLY rewritten query
+
+Previous Topic:
+{last_topic}
+
+Follow-up Query:
+{query}
+
+Rewritten Query:
+"""
+
+    rewritten_response = llm.invoke(
+        rewrite_prompt
+    )
+
+    rewritten_query = (
+        rewritten_response.content.strip()
+    )
+
+    return rewritten_query
+
+# ==================================================
+# TOPIC EXTRACTION
+# ==================================================
+
+def extract_topic(query):
+
+    prompt = f"""
+Extract ONLY the main healthcare topic
+from this query.
+
+Examples:
+Query: What is malaria?
+Topic: malaria
+
+Query: Symptoms of diabetes
+Topic: diabetes
+
+Query: How is dengue treated?
+Topic: dengue
+
+Return ONLY topic name.
+
+Query:
+{query}
+
+Topic:
+"""
+
+    response = llm.invoke(
+        prompt
+    )
+
+    topic = response.content.strip().lower()
+
+    return topic
+
+# ==================================================
+# STAGE 3 — RERANKING
+# ==================================================
+
+def rerank_documents(query, docs):
+
+    pairs = [
+        (query, doc.page_content)
+        for doc in docs
+    ]
+
+    scores = reranker.predict(
+        pairs
+    )
+
+    # ==================================================
+    # SORT USING SCORE ONLY
+    # ==================================================
+
+    ranked_docs = sorted(
+        zip(scores, docs),
+        key=lambda x: x[0],
+        reverse=True
+    )
+
+    return [
+        doc
+        for score, doc in ranked_docs
+    ]
+
+# ==================================================
+# STAGE 4 — REFINE DOCUMENTS
+# ==================================================
+
+def refine_documents(docs):
+
+    unique_docs = []
+
+    seen = set()
+
+    for doc in docs:
+
+        text = doc.page_content.strip()
+
+        if text not in seen:
+
+            unique_docs.append(doc)
+
+            seen.add(text)
+
+    return unique_docs
+
+# ==================================================
 # CHAT INPUT
-# =========================
+# ==================================================
 
 question = st.chat_input(
-    "Ask a healthcare question"
+    "Ask a healthcare question..."
 )
 
-# =========================
-# ANSWERING
-# =========================
+# ==================================================
+# MAIN PIPELINE
+# ==================================================
 
 if question:
 
-    # Store User Message
+    # ==================================================
+    # STORE USER MESSAGE
+    # ==================================================
 
     st.session_state.messages.append(
         {
@@ -363,80 +461,230 @@ if question:
         }
     )
 
-    # Display User Message
+    # ==================================================
+    # DISPLAY USER MESSAGE
+    # ==================================================
 
     with st.chat_message("user"):
 
-        st.markdown(question)
+        st.write(question)
 
     with st.spinner(
         "Generating answer..."
     ):
 
-        # Conversational Retrieval
+        # ==================================================
+        # STAGE 1 — QUERY REWRITE
+        # ==================================================
 
-        response = conversation_chain.invoke(
-            {
-                "question": question
-            }
+        rewritten_query = rewrite_query(
+            question
         )
 
-        answer = response["answer"]
+        # ==================================================
+        # STORE CURRENT TOPIC
+        # ==================================================
 
-        source_docs = response[
-            "source_documents"
-        ]
-
-        # Sources
-
-        sources = list(
-            set(
-                [
-                    f"{doc.metadata.get('source')} (Page {doc.metadata.get('page')})"
-                    for doc in source_docs
-                ]
-            )
+        new_topic = extract_topic(
+            rewritten_query
         )
 
-        # Assistant Response
-
-        with st.chat_message(
-            "assistant"
+        if (
+            new_topic
+            and
+            len(new_topic.split()) <= 4
         ):
 
-            response_placeholder = st.empty()
+            st.session_state.current_topic = new_topic
 
-            full_response = ""
+        # ==================================================
+        # STAGE 2 — RETRIEVAL
+        # ==================================================
 
-            # Streaming Response
+        retrieved_docs_with_scores = (
+            vectorstore.similarity_search_with_score(
+                rewritten_query,
+                k=5
+            )
+        )
 
-            for word in answer.split():
+        # ==================================================
+        # SIMILARITY FILTER
+        # ==================================================
 
-                full_response += word + " "
+        SIMILARITY_THRESHOLD = 15
 
-                response_placeholder.markdown(
-                    full_response + "▌"
+        retrieved_docs = []
+
+        for doc, score in retrieved_docs_with_scores:
+
+            if score <= SIMILARITY_THRESHOLD:
+
+                retrieved_docs.append(doc)
+
+        # ==================================================
+        # HANDLE NO DOCUMENTS
+        # ==================================================
+
+        if not retrieved_docs:
+
+            response_text = (
+                "The information is not available "
+                "in the uploaded healthcare documents."
+            )
+
+            sources = []
+
+        else:
+
+            # ==================================================
+            # STAGE 3 — RERANKING
+            # ==================================================
+
+            reranked_docs = rerank_documents(
+                rewritten_query,
+                retrieved_docs
+            )
+
+            # ==================================================
+            # STAGE 4 — REFINEMENT
+            # ==================================================
+
+            refined_docs = refine_documents(
+                reranked_docs
+            )
+
+            # ==================================================
+            # STAGE 5 — CONTEXT CREATION
+            # ==================================================
+
+            context = "\n\n".join(
+                [
+                    doc.page_content
+                    for doc in refined_docs
+                ]
+            )
+
+            # ==================================================
+            # SOURCES
+            # ==================================================
+
+            sources = list(
+                set(
+                    [
+                        f"{doc.metadata.get('source')} "
+                        f"(Page {doc.metadata.get('page')})"
+                        for doc in refined_docs
+                    ]
                 )
-
-            response_placeholder.markdown(
-                full_response
             )
 
-            # Sources
+            # ==================================================
+            # FINAL PROMPT
+            # ==================================================
 
-            st.subheader(
-                "Sources"
+            prompt = f"""
+You are a professional healthcare AI assistant.
+
+STRICT RULES:
+- Answer ONLY from provided healthcare context
+- Do NOT use outside knowledge
+- Do NOT hallucinate
+- Do NOT guess
+- If answer unavailable, say EXACTLY:
+The information is not available in the uploaded healthcare documents.
+
+Formatting Rules:
+- Use bullet points where needed
+- Keep answers concise
+- Keep answers readable
+
+Context:
+{context}
+
+Question:
+{question}
+
+Answer:
+"""
+
+            # ==================================================
+            # STAGE 6 — GENERATION
+            # ==================================================
+
+            response = llm.invoke(
+                prompt
             )
 
-            for source in sources:
+            response_text = response.content
 
-                st.write(source)
+            # ==================================================
+            # CLEAN RESPONSE
+            # ==================================================
 
-    # Store Assistant Response
+            response_text = (
+                response_text
+                .replace("z ", "• ")
+                .replace("\\n", "\n")
+            )
+
+            # ==================================================
+            # REMOVE SOURCES IF INVALID
+            # ==================================================
+
+            if (
+                "not available" in response_text.lower()
+                or
+                "not found" in response_text.lower()
+            ):
+
+                sources = []
+
+    # ==================================================
+    # STORE ASSISTANT RESPONSE
+    # ==================================================
 
     st.session_state.messages.append(
         {
             "role": "assistant",
-            "content": answer
+            "content": response_text
         }
     )
+
+    # ==================================================
+    # DISPLAY ASSISTANT RESPONSE
+    # ==================================================
+
+    with st.chat_message("assistant"):
+
+        st.write(response_text)
+
+        # ==================================================
+        # SHOW REWRITTEN QUERY
+        # ==================================================
+
+        if rewritten_query.lower() != question.lower():
+
+            with st.expander(
+                "🔄 View Rewritten Query"
+            ):
+
+                st.write(
+                    rewritten_query
+                )
+
+        # ==================================================
+        # SHOW SOURCES
+        # ==================================================
+
+        if sources:
+
+            with st.expander(
+                "📚 View Sources"
+            ):
+
+                for source in sources:
+
+                    st.write(
+                        f"• {source}"
+                    )
