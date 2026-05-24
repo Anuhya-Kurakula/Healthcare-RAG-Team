@@ -1,23 +1,83 @@
-def retrieve_documents(
+from rank_bm25 import BM25Okapi
+
+
+def hybrid_retrieve(
     query,
-    vectorstore
+    vectorstore,
+    documents,
+    k=6
 ):
 
-    retrieved = (
-        vectorstore.similarity_search_with_score(
-            query,
-            k=5
-        )
+    # ==========================================
+    # SEMANTIC SEARCH
+    # ==========================================
+
+    semantic_docs = vectorstore.similarity_search(
+        query,
+        k=k
     )
 
-    threshold = 15
+    # ==========================================
+    # KEYWORD SEARCH (BM25)
+    # ==========================================
 
-    docs = []
+    tokenized_docs = [
+        doc.page_content.lower().split()
+        for doc in documents
+    ]
 
-    for doc, score in retrieved:
+    bm25 = BM25Okapi(
+        tokenized_docs
+    )
 
-        if score <= threshold:
+    tokenized_query = (
+        query.lower().split()
+    )
 
-            docs.append(doc)
+    bm25_scores = bm25.get_scores(
+        tokenized_query
+    )
 
-    return docs
+    # ==========================================
+    # TOP KEYWORD DOCUMENTS
+    # ==========================================
+
+    top_indices = sorted(
+        range(len(bm25_scores)),
+        key=lambda i: bm25_scores[i],
+        reverse=True
+    )[:k]
+
+    keyword_docs = [
+        documents[i]
+        for i in top_indices
+    ]
+
+    # ==========================================
+    # COMBINE RESULTS
+    # ==========================================
+
+    combined_docs = (
+        semantic_docs +
+        keyword_docs
+    )
+
+    # ==========================================
+    # REMOVE DUPLICATES
+    # ==========================================
+
+    unique_docs = []
+
+    seen = set()
+
+    for doc in combined_docs:
+
+        content = doc.page_content
+
+        if content not in seen:
+
+            seen.add(content)
+
+            unique_docs.append(doc)
+
+    return unique_docs[:k]

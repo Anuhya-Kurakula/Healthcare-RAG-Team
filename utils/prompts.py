@@ -3,19 +3,38 @@ def build_prompt(
     question
 ):
 
-    return f"""
+    prompt = f"""
 You are a professional healthcare AI assistant.
 
-STRICT RULES:
-- Answer ONLY from provided healthcare context
-- Do NOT hallucinate
-- Do NOT use outside knowledge
+Answer ONLY using the provided healthcare context.
 
-Context:
+Give:
+- detailed answers
+- clear explanations
+- complete medical information
+- symptoms, causes, treatment, prevention if available
+- multiple points when relevant
+
+If information is not available in the context, say:
+"The information is not available in the uploaded healthcare documents."
+
+DO NOT give one-line answers unless the question itself requires it.
+
+========================
+HEALTHCARE CONTEXT:
+========================
+
 {context}
 
-Question:
+========================
+QUESTION:
+========================
+
 {question}
 
-Answer:
+========================
+ANSWER:
+========================
 """
+
+    return prompt

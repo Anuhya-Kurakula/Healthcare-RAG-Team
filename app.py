@@ -25,7 +25,7 @@ from utils.topic_extractor import (
 )
 
 from utils.retriever import (
-    retrieve_documents
+    hybrid_retrieve
 )
 
 from utils.reranker import (
@@ -35,6 +35,12 @@ from utils.reranker import (
 from utils.prompts import (
     build_prompt
 )
+
+from langchain_community.document_loaders import (
+    PyPDFLoader
+)
+
+import os
 
 # ==================================================
 # PAGE CONFIG
@@ -119,6 +125,39 @@ vectorstore = load_vectorstore(
 llm = load_llm()
 
 # ==================================================
+# LOAD DOCUMENTS FOR HYBRID SEARCH
+# ==================================================
+
+documents = []
+
+upload_folder = "uploads"
+
+if os.path.exists(upload_folder):
+
+    pdf_files = [
+        file
+        for file in os.listdir(upload_folder)
+        if file.endswith(".pdf")
+    ]
+
+    for file in pdf_files:
+
+        loader = PyPDFLoader(
+            os.path.join(
+                upload_folder,
+                file
+            )
+        )
+
+        docs = loader.load()
+
+        for doc in docs:
+
+            doc.metadata["source"] = file
+
+        documents.extend(docs)
+
+# ==================================================
 # DISPLAY CHAT HISTORY
 # ==================================================
 
@@ -196,19 +235,20 @@ if question:
             st.session_state.current_topic = topic
 
         # ==================================================
-        # RETRIEVAL
+        # HYBRID RETRIEVAL
         # ==================================================
 
-        docs = retrieve_documents(
+        retrieved_docs = hybrid_retrieve(
             rewritten_query,
-            vectorstore
+            vectorstore,
+            documents
         )
 
         # ==================================================
         # HANDLE NO DOCS
         # ==================================================
 
-        if not docs:
+        if not retrieved_docs:
 
             answer = (
                 "The information is not available "
@@ -225,7 +265,7 @@ if question:
 
             reranked_docs = rerank_documents(
                 rewritten_query,
-                docs,
+                retrieved_docs,
                 embeddings
             )
 
@@ -244,13 +284,16 @@ if question:
             # SOURCES
             # ==================================================
 
-            sources = list(
-                set(
-                    [
-                        f"{doc.metadata.get('source')} "
-                        f"(Page {doc.metadata.get('page')})"
-                        for doc in reranked_docs
-                    ]
+            sources = sorted(
+                list(
+                    set(
+                        [
+                            f"{doc.metadata.get('source')} "
+                            f"(Page {doc.metadata.get('page')})"
+                            for doc in reranked_docs
+                            if doc.metadata.get("source")
+                        ]
+                    )
                 )
             )
 
@@ -264,7 +307,7 @@ if question:
             )
 
             # ==================================================
-            # GENERATE
+            # GENERATE RESPONSE
             # ==================================================
 
             response = llm.invoke(
@@ -273,13 +316,11 @@ if question:
 
             answer = response.content
 
-            # ==================================================
-            # CLEAN RESPONSE
-            # ==================================================
-
             answer = (
-                answer
-                .replace("\\n", "\n")
+                answer.replace(
+                    "\\n",
+                    "\n"
+                )
             )
 
             # ==================================================
@@ -287,13 +328,14 @@ if question:
             # ==================================================
 
             if (
-                "not available" in answer.lower()
+                "not available"
+                in answer.lower()
             ):
 
                 sources = []
 
     # ==================================================
-    # STORE ASSISTANT MESSAGE
+    # STORE ASSISTANT RESPONSE
     # ==================================================
 
     st.session_state.messages.append(
@@ -314,27 +356,19 @@ if question:
         st.markdown(answer)
 
         # ==================================================
-        # REWRITTEN QUERY
+        # ALWAYS SHOW REWRITTEN QUERY
         # ==================================================
 
-        if (
-    rewritten_query
-    and
-    rewritten_query.lower().strip()
-    !=
-    question.lower().strip()
-):
+        with st.expander(
+            "🔄 View Rewritten Query"
+        ):
 
-            with st.expander(
-                "🔄 View Rewritten Query"
-            ):
-
-                st.write(
-                    rewritten_query
-                )
+            st.write(
+                rewritten_query
+            )
 
         # ==================================================
-        # SOURCES
+        # SHOW SOURCES
         # ==================================================
 
         if sources:
@@ -345,6 +379,6 @@ if question:
 
                 for source in sources:
 
-                    st.write(
-                        f"• {source}"
+                    st.markdown(
+                        f"- {source}"
                     )
