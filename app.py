@@ -269,6 +269,18 @@ if question:
                 embeddings
             )
 
+            print("=" * 50)
+            print("RETRIEVED DOCS")
+            print("=" * 50)
+
+            for doc in reranked_docs[:5]:
+
+                print(
+                    doc.page_content[:300]
+                )
+
+            print("-" * 50)
+
             # ==================================================
             # CONTEXT
             # ==================================================
