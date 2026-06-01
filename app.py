@@ -327,11 +327,23 @@ if question:
             # REMOVE SOURCES IF INVALID
             # ==================================================
 
-            if (
-                "not available"
-                in answer.lower()
+            if any(
+                phrase in answer.lower()
+                for phrase in [
+                    "not available",
+                    "not found",
+                    "not mention",
+                    "not aware",
+                    "outside the provided context",
+                    "no information",
+                    "unable to provide",
+                    "there is no information",
+                    "no relevant data available",
+                    "does not contain any information",
+                    "not related to the healthcare context",
+                    "cannot provide information"
+                ]
             ):
-
                 sources = []
 
     # ==================================================
@@ -353,10 +365,12 @@ if question:
         "assistant"
     ):
 
-        st.markdown(answer)
+        st.markdown(
+            answer
+        )
 
         # ==================================================
-        # ALWAYS SHOW REWRITTEN QUERY
+        # SHOW REWRITTEN QUERY
         # ==================================================
 
         with st.expander(
@@ -380,5 +394,5 @@ if question:
                 for source in sources:
 
                     st.markdown(
-                        f"- {source}"
+                        f"• {source}"
                     )
