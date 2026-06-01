@@ -5,7 +5,7 @@ def hybrid_retrieve(
     query,
     vectorstore,
     documents,
-    k=6
+    k=10
 ):
 
     # ==========================================
@@ -14,7 +14,7 @@ def hybrid_retrieve(
 
     semantic_docs = vectorstore.similarity_search(
         query,
-        k=k
+        k=10
     )
 
     # ==========================================
@@ -46,7 +46,7 @@ def hybrid_retrieve(
         range(len(bm25_scores)),
         key=lambda i: bm25_scores[i],
         reverse=True
-    )[:k]
+    )[:10]
 
     keyword_docs = [
         documents[i]
@@ -80,4 +80,4 @@ def hybrid_retrieve(
 
             unique_docs.append(doc)
 
-    return unique_docs[:k]
+    return unique_docs[:10]
