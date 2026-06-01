@@ -3,3 +3,4 @@ __pycache__/
 .env
 vectorstore/
 *.pyc
+chroma_db/
