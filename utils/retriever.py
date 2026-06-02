@@ -9,16 +9,43 @@ def hybrid_retrieve(
 ):
 
     # ==========================================
-    # SEMANTIC SEARCH
+    # SEMANTIC SEARCH WITH SCORES
     # ==========================================
 
-    semantic_docs = vectorstore.similarity_search(
-        query,
-        k=10
-    )
+    try:
+
+        semantic_results = (
+            vectorstore.similarity_search_with_score(
+                query,
+                k=k
+            )
+        )
+
+        semantic_docs = []
+
+        for doc, score in semantic_results:
+
+            # ==========================================
+            # FILTER LOW RELEVANCE RESULTS
+            # ==========================================
+
+            if score < 1.5:
+
+                semantic_docs.append(
+                    doc
+                )
+
+    except:
+
+        semantic_docs = (
+            vectorstore.similarity_search(
+                query,
+                k=k
+            )
+        )
 
     # ==========================================
-    # KEYWORD SEARCH (BM25)
+    # BM25 KEYWORD SEARCH
     # ==========================================
 
     tokenized_docs = [
@@ -39,14 +66,14 @@ def hybrid_retrieve(
     )
 
     # ==========================================
-    # TOP KEYWORD DOCUMENTS
+    # TOP BM25 DOCUMENTS
     # ==========================================
 
     top_indices = sorted(
         range(len(bm25_scores)),
         key=lambda i: bm25_scores[i],
         reverse=True
-    )[:10]
+    )[:k]
 
     keyword_docs = [
         documents[i]
@@ -54,12 +81,39 @@ def hybrid_retrieve(
     ]
 
     # ==========================================
+    # METADATA BOOSTING
+    # ==========================================
+
+    boosted_docs = []
+
+    query_lower = query.lower()
+
+    for doc in keyword_docs:
+
+        source = str(
+            doc.metadata.get(
+                "source",
+                ""
+            )
+        ).lower()
+
+        if any(
+            word in source
+            for word in query_lower.split()
+        ):
+
+            boosted_docs.append(
+                doc
+            )
+
+    # ==========================================
     # COMBINE RESULTS
     # ==========================================
 
     combined_docs = (
-        semantic_docs +
-        keyword_docs
+        boosted_docs
+        + semantic_docs
+        + keyword_docs
     )
 
     # ==========================================
@@ -76,8 +130,16 @@ def hybrid_retrieve(
 
         if content not in seen:
 
-            seen.add(content)
+            seen.add(
+                content
+            )
 
-            unique_docs.append(doc)
+            unique_docs.append(
+                doc
+            )
 
-    return unique_docs[:10]
+    # ==========================================
+    # RETURN TOP RESULTS
+    # ==========================================
+
+    return unique_docs[:k]

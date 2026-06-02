@@ -9,11 +9,19 @@ def rerank_documents(
     embeddings
 ):
 
+    # ==========================================
+    # QUERY EMBEDDING
+    # ==========================================
+
     query_embedding = embeddings.embed_query(
         query
     )
 
     doc_scores = []
+
+    # ==========================================
+    # COMPUTE SIMILARITY
+    # ==========================================
 
     for doc in docs:
 
@@ -26,9 +34,22 @@ def rerank_documents(
             [doc_embedding]
         )[0][0]
 
-        doc_scores.append(
-            (score, doc)
-        )
+        # ==========================================
+        # FILTER LOW QUALITY DOCUMENTS
+        # ==========================================
+
+        if score > 0.20:
+
+            doc_scores.append(
+                (
+                    score,
+                    doc
+                )
+            )
+
+    # ==========================================
+    # SORT BY SCORE
+    # ==========================================
 
     ranked_docs = sorted(
         doc_scores,
@@ -36,7 +57,11 @@ def rerank_documents(
         reverse=True
     )
 
+    # ==========================================
+    # RETURN TOP DOCUMENTS
+    # ==========================================
+
     return [
         doc
-        for score, doc in ranked_docs
+        for score, doc in ranked_docs[:8]
     ]

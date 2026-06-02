@@ -21,23 +21,12 @@ Information not available in uploaded healthcare documents.
 
 Information not available in uploaded healthcare documents.
 
-8. Do not mention information that is not found in the context.
-
-========================
-HEALTHCARE CONTEXT:
-========================
-
+CONTEXT:
 {context}
 
-========================
 QUESTION:
-========================
-
 {question}
 
-========================
 ANSWER:
-========================
 """
-
     return prompt
