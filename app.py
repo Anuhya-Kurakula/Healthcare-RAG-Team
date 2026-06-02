@@ -269,18 +269,6 @@ if question:
                 embeddings
             )
 
-            print("=" * 50)
-            print("RETRIEVED DOCS")
-            print("=" * 50)
-
-            for doc in reranked_docs[:5]:
-
-                print(
-                    doc.page_content[:300]
-                )
-
-            print("-" * 50)
-
             # ==================================================
             # CONTEXT
             # ==================================================
@@ -334,6 +322,57 @@ if question:
                     "\n"
                 )
             )
+
+            # ==================================================
+            # LOOKBACK VALIDATION
+            # ==================================================
+
+            validation_prompt = f"""
+You are a healthcare answer validator.
+
+CONTEXT:
+{context}
+
+ANSWER:
+{answer}
+
+Check whether the answer is fully supported by the context.
+
+Reply only:
+
+VALID
+
+or
+
+INVALID
+"""
+
+            validation_response = llm.invoke(
+                validation_prompt
+            )
+
+            validation_result = (
+                validation_response.content
+                .strip()
+                .upper()
+            )
+
+            print("=" * 50)
+            print("VALIDATION RESULT")
+            print(validation_result)
+            print("=" * 50)
+
+            # ==================================================
+            # SYSTEM-2 ATTENTION
+            # ==================================================
+
+            if validation_result == "INVALID":
+
+                answer = (
+                    "Information not available in uploaded healthcare documents."
+                )
+
+                sources = []
 
             # ==================================================
             # REMOVE SOURCES IF INVALID
