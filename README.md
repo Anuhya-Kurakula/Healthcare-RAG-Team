@@ -206,4 +206,4 @@ Healthcare-RAG-Assistant/
 
 # Author
 
-**Pavani Dangudubiyyam**
+** Anuhya Kurakula **
